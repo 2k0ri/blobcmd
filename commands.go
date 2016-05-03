@@ -6,6 +6,7 @@ import (
 
 	"github.com/2k0ri/blobcmd/command"
 	"github.com/codegangsta/cli"
+	"runtime"
 )
 
 var GlobalFlags = []cli.Flag{
@@ -23,15 +24,21 @@ var GlobalFlags = []cli.Flag{
 	},
 	cli.StringFlag{
 		EnvVar: "AZURE_STORAGE_CONTAINER",
-		Name:   "container, c",
+		Name:   "container, C",
 		Value:  "",
 		Usage:  "container",
 	},
 	cli.StringFlag{
 		EnvVar: "AZURE_STORAGE_CONNECTION_STRING",
-		Name:   "connection-string, C",
+		Name:   "connection-string, c",
 		Value:  "",
-		Usage:  "connection string",
+		Usage:  "connection string(under construction)",
+	},
+	cli.StringFlag{
+		EnvVar: "AZURE_STORAGE_SAS",
+		Name:   "sas, s",
+		Value:  "",
+		Usage:  "shared access signature(under construction)",
 	},
 	cli.StringFlag{
 		EnvVar: "AZURE_STORAGE_ACCESS_KEY",
@@ -49,6 +56,12 @@ var GlobalFlags = []cli.Flag{
 		EnvVar: "AZURE_DISABLE_HTTPS",
 		Name:   "disable-https",
 		Usage:  "disable HTTPS",
+	},
+	cli.IntFlag{
+		EnvVar: "AZURE_PARALLELISM",
+		Name:   "parallelism, P",
+		Value:  runtime.NumCPU(),
+		Usage:  "parallelism for goroutines",
 	},
 }
 
@@ -75,8 +88,12 @@ var Commands = []cli.Command{
 				Usage:  "",
 			},
 			cli.BoolFlag{
-				Name:   "output-as-blob",
+				Name:   "stdin-as-list",
 				Usage:  "",
+			},
+			cli.StringFlag{
+				Name:   "out-account-key, ok",
+				Usage:  "account key for output blob",
 			},
 			cli.BoolFlag{
 				Name:   "concat",

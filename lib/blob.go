@@ -2,124 +2,186 @@ package lib
 
 import (
 	"strings"
-	"log"
 	"github.com/Azure/azure-sdk-for-go/storage"
-	"bytes"
+	"sync"
+	"errors"
 	"fmt"
-	"os"
 )
 
-type Entity struct {
-	uri              string
-	isBlob           bool
-	accountName      string
-	accountKey       string
-	container        string
-	prefix           string
-	entryPoint       string
-	useHTTPS         bool
-	connectionString string
+type BlobContext struct {
+	AccountName string
+	AccountKey  string
+	Container   string
+	EntryPoint  string
+	UseHTTPS    bool
+	client      *storage.BlobStorageClient
 }
 
-func NewEntity(uri string) *Entity {
-	e := Entity{uri: uri}
-	e.isBlob = IsBlobURI(e.uri)
-	return &Entity{e}
-}
-
-func (e *Entity) GetBody() []byte {
-	if e.isBlob {
-		return e.getBlobBody()
-	} else {
-		return e.getBody()
-	}
-}
-
-func (e *Entity) getBlobBody() ([]byte, error) {
-	e.ParseBlobURI()
-	blobService := e.GetBlobService()
-	blob, err := blobService.GetBlob(e.container, e.prefix)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, e.prefix + ": " + err.Error())
-		return nil, err
-	}
-	buf := new(bytes.Buffer)
-	return buf.ReadFrom(blob), nil
-}
-
-func (e *Entity) getBody() []byte {
-
-}
-
-func (e *Entity) ParseBlobURI() {
-	e.accountName, e.container, e.prefix, e.entryPoint, e.useHTTPS = ParseBlobURI(e.uri)
-}
-
-func (e *Entity) GetBlobService() *storage.BlobStorageClient {
-	blobService := GetBlobService(e.accountName, e.accountKey, e.entryPoint, e.useHTTPS)
-	return &storage.BlobStorageClient{blobService}
-}
-
-func ParseConnectionString(uri string) {
-
-}
-
-var client storage.Client
-
-func GetBlobService(accountName, accountKey, entryPoint string, useHTTPS bool) storage.BlobStorageClient {
-	var err error
-	if client == nil {
-		client, err = storage.NewClient(accountName, accountKey, entryPoint, "2015-02-21", useHTTPS)
+func (b *BlobContext) GetBlobClient() (*storage.BlobStorageClient, error) {
+	if b.client == nil {
+		client, err := GetBlobClient(b.AccountName, b.AccountKey, b.EntryPoint, b.UseHTTPS)
 		if err != nil {
-			log.Fatalf("Error: %v", err)
+			return b.client, err
 		}
+		b.client = &client
 	}
-	return client.GetBlobService()
+	return b.client, nil
+}
+
+func (b *BlobContext) Validate() error {
+	var e string
+	if b.AccountName == "" {
+		e += "AccountName is required\n"
+	}
+	if b.AccountKey == "" {
+		e += "AccountKey is required\n"
+	}
+	if b.EntryPoint == "" {
+		e += "EntryPoint is required\n"
+	}
+	if b.Container == "" {
+		e += "Container is required\n"
+	}
+	if e != "" {
+		return errors.New(e)
+	}
+	return nil
+}
+
+func GetBlobClient(accountName, accountKey, entryPoint string, useHTTPS bool) (storage.BlobStorageClient, error) {
+	client, err := storage.NewClient(accountName, accountKey, entryPoint, "2015-02-21", useHTTPS)
+	if err != nil {
+		return storage.BlobStorageClient{}, err
+	}
+	return client.GetBlobService(), nil
 }
 
 func IsBlobURI(uri string) bool {
 	return strings.HasPrefix(uri, "https://") || strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "wasb://") || strings.HasPrefix(uri, "wasbs://")
 }
 
-// ParseBlobURI parses blob uri and returns (accountName, container, prefix, entryPoint, useHTTPS)
-func ParseBlobURI(uri string) (string, string, string, string, bool) {
+// ParseBlobURI parses blob uri and returns BlobContext
+func ParseBlobURI(uri string) (BlobContext, error) {
+	var b BlobContext
 	if ! IsBlobURI(uri) {
-		return nil, nil, nil, nil, nil
+		return b, errors.New("not an blob")
 	}
-	var (
-		accountName, container, prefix, entryPoint string
-		useHTTPS bool
-	)
 
 	protocol := strings.SplitN(uri, ":", 2)[0]
-	useHTTPS = strings.HasSuffix(protocol, "s")
+	b.UseHTTPS = strings.HasSuffix(protocol, "s")
 
-	if strings.HasPrefix(protocol, "http") {
-		// http[s]://myaccount.blob.core.windows.net/mycontainer/myblob?...
-		u := strings.Split(uri, "/") // []string{"https:", "", "myaccount.blob.core.windows.net", "mycontainer", "myblob"} 
-		container = u[3]
-		if len(u) >= 5 {
-			prefix = strings.SplitN(u[4], "?", 2)[0]
-		}
+	if strings.HasPrefix(protocol, "http") { // http[s]://myaccount.blob.core.windows.net/mycontainer/myblob?...
+		u := strings.Split(uri, "/") // []string{"https:", "", "myaccount.blob.core.windows.net", "mycontainer", "myblob"}
+		b.Container = u[3]
 		ud := strings.SplitN(u[2], ".", 3) // []string{"myaccount", "blob", "core.windows.net"}
-		accountName = ud[0]
-		entryPoint = ud[2]
-	} else if strings.HasPrefix(protocol, "wasb") {
-		// wasb[s]://<containername>@<accountname>.blob.core.windows.net/<path>
+		b.AccountName = ud[0]
+		b.EntryPoint = ud[2]
+	} else if strings.HasPrefix(protocol, "wasb") { // wasb[s]://<containername>@<accountname>.blob.core.windows.net/<path>
 		u := strings.Split(uri, "/") // []string{"wasb:", "", "<containername>@<accountname>.blob.core.windows.net", "<path>"}
-		if len(u) >= 4 {
-			prefix = strings.SplitN(u[3], "?", 2)[0]
-		}
-
 		ua := strings.SplitN(u[2], "@", 2) // []string{"<containername>", "<accountname>.blob.core.windows.net"}
-		container = ua[0]
-
+		b.Container = ua[0]
 		ud := strings.SplitN(ua[1], ".", 3) // []string{"<accountname>", "blob", "core.windows.net"}
-		accountName = ud[0]
-		entryPoint = ud[2]
+		b.AccountName = ud[0]
+		b.EntryPoint = ud[2]
 	}
 
-	return accountName, container, prefix, entryPoint, useHTTPS
+	return b, nil
 }
 
-func 
+func ParseBlobName(uri string) (string, error) {
+	if ! IsBlobURI(uri) {
+		return "", errors.New("not an blob")
+	}
+	var i int
+	if strings.HasPrefix(uri, "http") { // http[s]://myaccount.blob.core.windows.net/mycontainer/myblob?...
+		i = 4
+	} else { // wasb[s]://<containername>@<accountname>.blob.core.windows.net/<path>
+		i = 3
+	}
+	u := strings.SplitN(uri, "/", i+1)
+	return strings.SplitN(u[i], "?", 2)[0], nil
+}
+
+func List(b *BlobContext, prefix string) ([]string, error) {
+	var (
+		m sync.RWMutex
+		w sync.WaitGroup
+		names []string
+	)
+	c, err := b.GetBlobClient()
+	if err != nil {
+		return  names, err
+	}
+
+	p := storage.ListBlobsParameters{Prefix: prefix}
+	for {
+		res, err := c.ListBlobs(b.Container, p)
+		if err != nil {
+			return names, err
+		}
+
+		// parse names
+		w.Add(1)
+		go func(blobs []storage.Blob) {
+			defer w.Done()
+			m.Lock()
+			n := make([]string, len(blobs))
+			for i, blob := range blobs {
+				n[i] = blob.Name
+			}
+			// names = append(names, n...)
+			fmt.Println(strings.Join(n, "\n"))
+			m.Unlock()
+		}(res.Blobs)
+
+		// recursive list request
+		if res.NextMarker == "" {
+			break
+		}
+		p.Marker = res.NextMarker
+	}
+	w.Wait()
+	return names, nil
+}
+
+func ListContainers(b *BlobContext) ([]string, error) {
+	var (
+		m sync.RWMutex
+		w sync.WaitGroup
+		names []string
+	)
+	c, err := b.GetBlobClient()
+	if err != nil {
+		return  names, err
+	}
+
+	p := storage.ListContainersParameters{}
+	for {
+		res, err := c.ListContainers(p)
+		if err != nil {
+			return names, err
+		}
+
+		// parse names
+		w.Add(1)
+		go func(blobs []storage.Container) {
+			defer w.Done()
+			m.Lock()
+			n := make([]string, len(blobs))
+			for i, blob := range blobs {
+				n[i] = blob.Name
+			}
+			// names = append(names, n...)
+			fmt.Println(strings.Join(n, "\n"))
+			m.Unlock()
+		}(res.Containers)
+
+		// recursive list request
+		if res.NextMarker == "" {
+			break
+		}
+		p.Marker = res.NextMarker
+	}
+	w.Wait()
+	return names, nil
+}
