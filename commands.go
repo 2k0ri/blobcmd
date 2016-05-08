@@ -92,12 +92,16 @@ var Commands = []cli.Command{
 				Usage:  "",
 			},
 			cli.StringFlag{
-				Name:   "out-account-key, ok",
+				Name:   "out-account-key",
 				Usage:  "account key for output blob",
 			},
 			cli.BoolFlag{
 				Name:   "concat",
 				Usage:  "concat INFILEs and upload as one OUTFILE",
+			},
+			cli.BoolFlag{
+				Name:   "dryrun, dry-run, n",
+				Usage:  "dry-run",
 			},
 		),
 	},
@@ -110,6 +114,10 @@ var Commands = []cli.Command{
 			cli.BoolFlag{
 				Name:   "recursive, r",
 				Usage:  "remove recursively",
+			},
+			cli.BoolFlag{
+				Name:   "dryrun, dry-run, n",
+				Usage:  "dry-run",
 			},
 		),
 	},

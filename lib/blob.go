@@ -14,18 +14,22 @@ type BlobContext struct {
 	Container   string
 	EntryPoint  string
 	UseHTTPS    bool
-	client      *storage.BlobStorageClient
 }
 
+var clients map[BlobContext]*storage.BlobStorageClient
+
 func (b *BlobContext) GetBlobClient() (*storage.BlobStorageClient, error) {
-	if b.client == nil {
+	if clients == nil {
+		clients = map[BlobContext]*storage.BlobStorageClient{}
+	}
+	if clients[*b] == nil {
 		client, err := GetBlobClient(b.AccountName, b.AccountKey, b.EntryPoint, b.UseHTTPS)
 		if err != nil {
-			return b.client, err
+			return nil, err
 		}
-		b.client = &client
+		clients[*b] = &client
 	}
-	return b.client, nil
+	return clients[*b], nil
 }
 
 func (b *BlobContext) Validate() error {
@@ -38,6 +42,18 @@ func (b *BlobContext) Validate() error {
 	}
 	if b.EntryPoint == "" {
 		e += "EntryPoint is required\n"
+	}
+	if e != "" {
+		return errors.New(e)
+	}
+	return nil
+}
+
+func (b *BlobContext) ValidateWithContainer() error {
+	var e string
+	err := b.Validate()
+	if err != nil {
+		e += err.Error()
 	}
 	if b.Container == "" {
 		e += "Container is required\n"
@@ -133,48 +149,6 @@ func List(b *BlobContext, prefix string) ([]string, error) {
 			fmt.Println(strings.Join(n, "\n"))
 			m.Unlock()
 		}(res.Blobs)
-
-		// recursive list request
-		if res.NextMarker == "" {
-			break
-		}
-		p.Marker = res.NextMarker
-	}
-	w.Wait()
-	return names, nil
-}
-
-func ListContainers(b *BlobContext) ([]string, error) {
-	var (
-		m sync.RWMutex
-		w sync.WaitGroup
-		names []string
-	)
-	c, err := b.GetBlobClient()
-	if err != nil {
-		return  names, err
-	}
-
-	p := storage.ListContainersParameters{}
-	for {
-		res, err := c.ListContainers(p)
-		if err != nil {
-			return names, err
-		}
-
-		// parse names
-		w.Add(1)
-		go func(blobs []storage.Container) {
-			defer w.Done()
-			m.Lock()
-			n := make([]string, len(blobs))
-			for i, blob := range blobs {
-				n[i] = blob.Name
-			}
-			// names = append(names, n...)
-			fmt.Println(strings.Join(n, "\n"))
-			m.Unlock()
-		}(res.Containers)
 
 		// recursive list request
 		if res.NextMarker == "" {
