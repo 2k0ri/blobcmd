@@ -122,7 +122,7 @@ func ParseBlobName(uri string) (string, error) {
 	return strings.SplitN(u[i], "?", 2)[0], nil
 }
 
-func List(b *BlobContext, prefix string, r bool) ([]string, error) {
+func List(b *BlobContext, prefix string, recursive bool, print bool) ([]string, error) {
 	var (
 		m sync.RWMutex
 		w sync.WaitGroup
@@ -134,7 +134,7 @@ func List(b *BlobContext, prefix string, r bool) ([]string, error) {
 	}
 
 	p := storage.ListBlobsParameters{Prefix: prefix}
-	if !r {
+	if !recursive {
 		p.Delimiter = "/"
 	}
 
@@ -145,12 +145,13 @@ func List(b *BlobContext, prefix string, r bool) ([]string, error) {
 		}
 
 		// If not recursive, list blob prefixes
-		if !r {
+		if !recursive {
 			w.Add(1)
 			go func(prefixes []string) {
 				defer w.Done()
 				m.Lock()
 				n := make([]string, len(prefixes))
+				// @TODO remove duplicate prefixes
 				for i, prefix := range prefixes {
 					n[i] = prefix
 				}

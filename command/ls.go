@@ -51,17 +51,23 @@ func CmdLs(c *cli.Context) {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
-	if b.Container == "" {
+	if b.Container != "" {
+		// print header if tty
+		if terminal.IsTerminal(int(os.Stdout.Fd())) {
+			fmt.Println("Name\tBlobType\tLength\tContent-Type\tLast-Modified")
+		}
+		// @TODO separate list and asynchronous print
+		_, err = lib.List(&b, p, r, true)
+	} else {
+		// list containers instead of blobs
+
+		// print header if tty
+		// if terminal.IsTerminal(int(os.Stdout.Fd())) {
+		// 	fmt.Println("ContainerName")
+		// }
 		_, err = ListContainers(&b)
 	}
-	// list, err := lib.List(&b, p)
-	// print header if tty
-	if terminal.IsTerminal(int(os.Stdout.Fd())) {
-		fmt.Println("Name\tBlobType\tLength\tContent-Type\tLast-Modified")
-	}
 
-	// @TODO separate list and asynchronous print
-	_, err = lib.List(&b, p, r)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
