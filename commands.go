@@ -71,7 +71,12 @@ var Commands = []cli.Command{
 		Aliases: []string{"list"},
 		Usage:   "list",
 		Action:  command.CmdLs,
-		Flags:   GlobalFlags,
+		Flags:   append(GlobalFlags,
+			cli.BoolFlag{
+				Name:   "recursive, r",
+				Usage:  "list recursively",
+			},
+		),
 	},
 	{
 		Name:    "cp",

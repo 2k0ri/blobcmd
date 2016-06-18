@@ -86,13 +86,15 @@ func ParseBlobURI(uri string) (BlobContext, error) {
 	protocol := strings.SplitN(uri, ":", 2)[0]
 	b.UseHTTPS = strings.HasSuffix(protocol, "s")
 
-	if strings.HasPrefix(protocol, "http") { // http[s]://myaccount.blob.core.windows.net/mycontainer/myblob?...
+	if strings.HasPrefix(protocol, "http") {
+		// http[s]://myaccount.blob.core.windows.net/mycontainer/myblob?...
 		u := strings.Split(uri, "/") // []string{"https:", "", "myaccount.blob.core.windows.net", "mycontainer", "myblob"}
 		b.Container = u[3]
 		ud := strings.SplitN(u[2], ".", 3) // []string{"myaccount", "blob", "core.windows.net"}
 		b.AccountName = ud[0]
 		b.EntryPoint = ud[2]
-	} else if strings.HasPrefix(protocol, "wasb") { // wasb[s]://<containername>@<accountname>.blob.core.windows.net/<path>
+	} else if strings.HasPrefix(protocol, "wasb") {
+		// wasb[s]://<containername>@<accountname>.blob.core.windows.net/<path>
 		u := strings.Split(uri, "/") // []string{"wasb:", "", "<containername>@<accountname>.blob.core.windows.net", "<path>"}
 		ua := strings.SplitN(u[2], "@", 2) // []string{"<containername>", "<accountname>.blob.core.windows.net"}
 		b.Container = ua[0]
@@ -109,16 +111,18 @@ func ParseBlobName(uri string) (string, error) {
 		return "", errors.New("not an blob")
 	}
 	var i int
-	if strings.HasPrefix(uri, "http") { // http[s]://myaccount.blob.core.windows.net/mycontainer/myblob?...
+	if strings.HasPrefix(uri, "http") {
+		// http[s]://myaccount.blob.core.windows.net/mycontainer/myblob?...
 		i = 4
-	} else { // wasb[s]://<containername>@<accountname>.blob.core.windows.net/<path>
+	} else {
+		// wasb[s]://<containername>@<accountname>.blob.core.windows.net/<path>
 		i = 3
 	}
-	u := strings.SplitN(uri, "/", i+1)
+	u := strings.SplitN(uri, "/", i + 1)
 	return strings.SplitN(u[i], "?", 2)[0], nil
 }
 
-func List(b *BlobContext, prefix string) ([]string, error) {
+func List(b *BlobContext, prefix string, r bool) ([]string, error) {
 	var (
 		m sync.RWMutex
 		w sync.WaitGroup
@@ -126,27 +130,54 @@ func List(b *BlobContext, prefix string) ([]string, error) {
 	)
 	c, err := b.GetBlobClient()
 	if err != nil {
-		return  names, err
+		return names, err
 	}
 
 	p := storage.ListBlobsParameters{Prefix: prefix}
+	if !r {
+		p.Delimiter = "/"
+	}
+
 	for {
 		res, err := c.ListBlobs(b.Container, p)
 		if err != nil {
 			return names, err
 		}
 
-		// parse names
+		// If not recursive, list blob prefixes
+		if !r {
+			w.Add(1)
+			go func(prefixes []string) {
+				defer w.Done()
+				m.Lock()
+				n := make([]string, len(prefixes))
+				for i, prefix := range prefixes {
+					n[i] = prefix
+				}
+
+				// @TODO separate list and asynchronous print
+				if len(n) > 0 {
+					fmt.Println(strings.Join(n, "\n"))
+				}
+				m.Unlock()
+			}(res.BlobPrefixes)
+		}
+
+		// list items
 		w.Add(1)
 		go func(blobs []storage.Blob) {
 			defer w.Done()
 			m.Lock()
 			n := make([]string, len(blobs))
 			for i, blob := range blobs {
-				n[i] = blob.Name
+				// @FIXME BlobType does not appeared(Casting issue?)
+				n[i] = fmt.Sprintf("%s\t%s\t%d\t%s\t%s", blob.Name, blob.Properties.BlobType, blob.Properties.ContentLength, blob.Properties.ContentType, blob.Properties.LastModified)
 			}
-			// names = append(names, n...)
-			fmt.Println(strings.Join(n, "\n"))
+
+			// @TODO separate list and asynchronous print
+			if len(n) > 0 {
+				fmt.Println(strings.Join(n, "\n"))
+			}
 			m.Unlock()
 		}(res.Blobs)
 
