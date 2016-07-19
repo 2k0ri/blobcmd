@@ -9,7 +9,7 @@ import (
 	"github.com/2k0ri/blobcmd/lib"
 	"github.com/Azure/azure-sdk-for-go/storage"
 	"github.com/codegangsta/cli"
-	"code.google.com/p/go.crypto/ssh/terminal"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 func CmdLs(c *cli.Context) {
