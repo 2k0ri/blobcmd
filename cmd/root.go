@@ -27,16 +27,11 @@ var cfgFile string
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "blobcmd",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-// Uncomment the following line if your bare application
-// has an action associated with it:
-//	Run: func(cmd *cobra.Command, args []string) { },
+	Short: "Microsoft Azure Storage Blob(WASB) command utility",
+	Long:  `A tool for accessing Microsoft Azure Storage Blob(WASB).`,
+	// Uncomment the following line if your bare application
+	// has an action associated with it:
+	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -54,11 +49,21 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports Persistent Flags, which, if defined here,
 	// will be global for your application.
+	viper.SetEnvPrefix("AZURE_STORAGE")
 
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.blobcmd.yaml)")
+	RootCmd.PersistentFlags().StringP("connection-string", "c", "", "Storage connection string [AZURE_STORAGE_CONNECTION_STRING]")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.PersistentFlags().StringP("account-name", "a", "", "Storage account name [AZURE_STORAGE_ACCOUNT]")
+	viper.RegisterAlias("account", "account-name")
+	RootCmd.PersistentFlags().StringP("account-key", "k", "", "Storage account key [AZURE_STORAGE_ACCESS_KEY]")
+	viper.RegisterAlias("access-key", "account-key")
+	RootCmd.PersistentFlags().StringP("container", "C", "", "Storage container name [AZURE_STORAGE_CONTAINER]")
+	RootCmd.PersistentFlags().StringP("prefix", "p", "", "Prefix for blob")
+	RootCmd.PersistentFlags().BoolP("recursive", "r", false, "Execute recursively")
+	RootCmd.PersistentFlags().Bool("disable-https", false, "Disable https access")
+	RootCmd.PersistentFlags().StringP("azure-storage-entrypoint", "E", "", "Azure Storage Entry Point")
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.blobcmd.yaml)")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -68,8 +73,8 @@ func initConfig() {
 	}
 
 	viper.SetConfigName(".blobcmd") // name of config file (without extension)
-	viper.AddConfigPath("$HOME")  // adding home directory as first search path
-	viper.AutomaticEnv()          // read in environment variables that match
+	viper.AddConfigPath("$HOME")    // adding home directory as first search path
+	viper.AutomaticEnv()            // read in environment variables that match
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
