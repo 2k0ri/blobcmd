@@ -4,13 +4,13 @@ import "testing"
 
 func TestDetectMime(t *testing.T) {
 	cases := map[string]string{
-		"csv":"text/csv",
-		"json":"application/json",
-		"avro":"avro/binary",
-		"gz":"application/gzip",
-		"html":"text/html",
-		"jpg":"image/jpeg",
-		"":"application/octet-stream",
+		"csv":  "text/csv",
+		"json": "application/json",
+		"avro": "avro/binary",
+		"gz":   "application/gzip",
+		"html": "text/html",
+		"jpg":  "image/jpeg",
+		"":     "application/octet-stream",
 	}
 
 	for k, expected := range cases {

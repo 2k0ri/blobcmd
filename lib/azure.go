@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"path"
 	"strings"
-	"mime"
 
 	"github.com/Azure/azure-sdk-for-go/storage"
 )
@@ -329,7 +329,7 @@ func detectMime(blobName string) string {
 		ctype = "application/gzip"
 	default:
 		// guess by "mime" package
-		ctype = mime.TypeByExtension("."+ext)
+		ctype = mime.TypeByExtension("." + ext)
 		if ctype == "" {
 			ctype = "application/octet-stream"
 		}
