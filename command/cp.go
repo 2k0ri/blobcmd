@@ -6,7 +6,14 @@ import (
 
 	"github.com/2k0ri/blobcmd/lib"
 	"github.com/codegangsta/cli"
+	"io"
 )
+
+func copy(in io.ReadCloser, out io.WriteCloser) {
+	io.Copy(out, in)
+}
+
+func getWriter() {}
 
 /*
 func copy(c *cli.Context, in, out string) error {

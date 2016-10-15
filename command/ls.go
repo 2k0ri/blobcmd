@@ -24,8 +24,8 @@ func CmdLs(c *cli.Context) {
 
 	var (
 		path string
-		b lib.BlobContext
-		err error
+		b    lib.BlobContext
+		err  error
 	)
 	if c.NArg() >= 1 {
 		path = c.Args()[0]
@@ -76,10 +76,10 @@ func CmdLs(c *cli.Context) {
 	os.Exit(0)
 }
 
-func ListContainers(b *lib.BlobContext, ) ([]string, error) {
+func ListContainers(b *lib.BlobContext) ([]string, error) {
 	var (
-		m sync.RWMutex
-		w sync.WaitGroup
+		m     sync.RWMutex
+		w     sync.WaitGroup
 		names []string
 	)
 	c, err := b.GetBlobClient()

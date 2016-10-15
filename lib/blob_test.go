@@ -1,8 +1,8 @@
 package lib
 
 import (
-	"testing"
 	"github.com/ToQoz/gopwt/assert"
+	"testing"
 )
 
 func TestParseBlobURIHTTP(t *testing.T) {
