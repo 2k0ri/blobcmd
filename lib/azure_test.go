@@ -20,3 +20,7 @@ func TestDetectMime(t *testing.T) {
 		}
 	}
 }
+
+func TestSprintBlobListCh(t *testing.T) {
+
+}

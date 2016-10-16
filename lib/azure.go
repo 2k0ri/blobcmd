@@ -297,6 +297,126 @@ func (c *AzureClient) Glob(pattern string) (matches []string, err error) {
 	return matches, nil
 }
 
+// List returns storage.Blob channel
+func (c *AzureClient) List(container, prefix string, recursive bool) <-chan storage.Blob {
+	ch := make(chan storage.Blob, 5000)
+	go func() {
+		defer close(ch)
+		// loop until ListBlobResponse channel closes
+	loop:
+		for {
+			select {
+			case listRes, ok := <-c.list(container, prefix, recursive):
+				if !ok {
+					break loop
+				}
+				for b := range listRes.Blobs {
+					ch <- b
+				}
+			default:
+				// c.list blocking...
+			}
+		}
+	}()
+	return ch
+}
+
+// list returns storage.BlobListResponse channel
+// it contains recursive traverse within azure storage blob
+func (c *AzureClient) list(container, prefix string, recursive bool) <-chan storage.BlobListResponse {
+	param := storage.ListBlobsParameters{Prefix: prefix}
+	if !recursive {
+		param.Delimiter = "/"
+	}
+	ch := make(chan storage.Blob, 5000)
+	go func() {
+		defer close(ch)
+		// loop until NextMarker ends
+		for {
+			res, err := c.blobClient.ListBlobs(container, param)
+			if err != nil {
+				// @TODO genuine error handling
+				log.Println(err)
+				continue
+			}
+			ch <- res
+			if res.NextMarker == "" {
+				break
+			}
+			param.Marker = res.NextMarker
+		}
+	}()
+	return ch
+}
+
+// Find returns AzureFile channel
+func (c *AzureClient) Find(LR <-chan storage.Blob) <-chan AzureFile {
+	ch := make(chan AzureFile)
+loop:
+	for {
+		select {
+		case blob, ok := <-LR:
+			if !ok {
+				break loop
+			}
+			f, err := c.OpenWriteCloser(blob.Name)
+			if err != nil {
+				log.Println(err)
+			}
+			ch <- f
+		default:
+			// channel blocking
+		}
+	}
+	return ch
+}
+
+func SprintBlobCh(LR <-chan storage.Blob) <-chan string {
+	ch := make(chan string)
+loop:
+	for {
+		select {
+		case b, ok := <-LR:
+			if !ok {
+				break loop
+			}
+			ch <- SprintBlob(b)
+		default:
+			// channel blocking
+		}
+	}
+	return ch
+}
+
+// SprintBlobListCh returns string channel from storage.BlobListResponse channel
+func SprintBlobListCh(LR <-chan storage.BlobListResponse, recursive bool) <-chan string {
+	ch := make(chan string)
+loop:
+	for {
+		select {
+		case listRes, ok := <-LR:
+			if !ok {
+				break loop
+			}
+			if !recursive {
+				for p := range listRes.BlobPrefixes {
+					ch <- p
+				}
+			}
+			for _, b := range listRes.Blobs {
+				ch <- SprintBlob(b)
+			}
+		}
+	}
+	return ch
+}
+
+// SprintBlob returns string from storage.Blob with template
+// @TODO pluggable template
+func SprintBlob(b storage.Blob) string {
+	return fmt.Sprintf("%v\t%v\t%v\t%v\t%v", b.Name, b.Properties.BlobType, b.Properties.ContentLength, b.Properties.ContentType, b.Properties.LastModified)
+}
+
 // NewAzureClient function
 // NewClient constructs a StorageClient and blobStorageClient.
 // This should be used if the caller wants to specify
@@ -313,7 +433,7 @@ func NewAzureClient(accountName, accountKey, baseURL string, useHTTPS bool) (*Az
 	}, nil
 }
 
-// DetectMime returns Content-Type string from extension
+// detectMime returns Content-Type string from extension
 func detectMime(blobName string) string {
 	_e := strings.Split(blobName, ".")
 	ext := strings.ToLower(_e[len(_e)-1])
