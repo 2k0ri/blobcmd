@@ -9,8 +9,10 @@ import (
 	"io"
 	"log"
 	"mime"
+	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/storage"
 )
@@ -297,117 +299,134 @@ func (c *AzureClient) Glob(pattern string) (matches []string, err error) {
 	return matches, nil
 }
 
-// List returns storage.Blob channel
-func (c *AzureClient) List(container, prefix string, recursive bool) <-chan storage.Blob {
-	ch := make(chan storage.Blob, 5000)
-	go func() {
-		defer close(ch)
-		// loop until ListBlobResponse channel closes
-	loop:
-		for {
-			select {
-			case listRes, ok := <-c.list(container, prefix, recursive):
-				if !ok {
-					break loop
-				}
-				for b := range listRes.Blobs {
-					ch <- b
-				}
-			default:
-				// c.list blocking...
-			}
-		}
-	}()
-	return ch
-}
-
-// list returns storage.BlobListResponse channel
-// it contains recursive traverse within azure storage blob
-func (c *AzureClient) list(container, prefix string, recursive bool) <-chan storage.BlobListResponse {
+// list inputs storage.BlobListResponse into provided channel
+// it covers recursive traverse within azure storage blob
+func (c *AzureClient) list(container, prefix string, recursive bool, ch chan storage.BlobListResponse) {
 	param := storage.ListBlobsParameters{Prefix: prefix}
 	if !recursive {
 		param.Delimiter = "/"
 	}
-	ch := make(chan storage.Blob, 5000)
+	defer close(ch)
+	// loop until NextMarker ends
+	for {
+		res, err := c.blobClient.ListBlobs(container, param)
+		if err != nil {
+			// @TODO genuine error handling
+			log.Println(err)
+			continue
+		}
+		ch <- res
+		if res.NextMarker == "" {
+			break
+		}
+		param.Marker = res.NextMarker
+	}
+}
+
+// ListAndPrint outputs print blobs to Stdout
+// @TODO stop when container not found
+// @TODO finish channel
+func (c *AzureClient) ListAndPrint(container, prefix string, recursive bool, w *sync.WaitGroup) {
+	lr := make(chan storage.BlobListResponse, 1024)
+	w.Add(2)
+	go func() {
+		defer w.Done()
+		c.list(container, prefix, recursive, lr)
+	}()
+	go func() {
+		defer w.Done()
+		FprintBlobList(lr, recursive, os.Stdout)
+	}()
+	w.Wait()
+}
+
+// Find returns AzureFile channel
+func (c *AzureClient) Find(b <-chan storage.Blob) <-chan AzureFile {
+	ch := make(chan AzureFile, 5000)
 	go func() {
 		defer close(ch)
-		// loop until NextMarker ends
+	loop:
 		for {
-			res, err := c.blobClient.ListBlobs(container, param)
-			if err != nil {
-				// @TODO genuine error handling
-				log.Println(err)
-				continue
+			select {
+			case blob, ok := <-b:
+				if !ok {
+					break loop
+				}
+				ch <- AzureFile{
+					path:   blob.Name,
+					client: c.blobClient,
+				}
+			default:
+				// channel blocking
 			}
-			ch <- res
-			if res.NextMarker == "" {
-				break
-			}
-			param.Marker = res.NextMarker
 		}
 	}()
 	return ch
 }
 
-// Find returns AzureFile channel
-func (c *AzureClient) Find(LR <-chan storage.Blob) <-chan AzureFile {
-	ch := make(chan AzureFile)
-loop:
-	for {
-		select {
-		case blob, ok := <-LR:
-			if !ok {
-				break loop
-			}
-			f, err := c.OpenWriteCloser(blob.Name)
-			if err != nil {
-				log.Println(err)
-			}
-			ch <- f
-		default:
-			// channel blocking
-		}
-	}
-	return ch
-}
-
-func SprintBlobCh(LR <-chan storage.Blob) <-chan string {
-	ch := make(chan string)
-loop:
-	for {
-		select {
-		case b, ok := <-LR:
-			if !ok {
-				break loop
-			}
-			ch <- SprintBlob(b)
-		default:
-			// channel blocking
-		}
-	}
-	return ch
-}
-
 // SprintBlobListCh returns string channel from storage.BlobListResponse channel
-func SprintBlobListCh(LR <-chan storage.BlobListResponse, recursive bool) <-chan string {
-	ch := make(chan string)
+func SprintBlobListCh(lr <-chan storage.BlobListResponse, recursive bool, out chan string) {
+	defer close(out)
 loop:
 	for {
 		select {
-		case listRes, ok := <-LR:
+		case listRes, ok := <-lr:
 			if !ok {
 				break loop
 			}
 			if !recursive {
-				for p := range listRes.BlobPrefixes {
-					ch <- p
+				for _, p := range listRes.BlobPrefixes {
+					out <- p
 				}
 			}
 			for _, b := range listRes.Blobs {
-				ch <- SprintBlob(b)
+				out <- SprintBlob(b)
 			}
+		default:
+			// channel blocking
 		}
 	}
+}
+
+// FprintBlobList returns string channel from storage.BlobListResponse channel
+func FprintBlobList(lr <-chan storage.BlobListResponse, recursive bool, out io.Writer) {
+loop:
+	for {
+		select {
+		case listRes, ok := <-lr:
+			if !ok {
+				break loop
+			}
+			if !recursive {
+				for _, p := range listRes.BlobPrefixes {
+					fmt.Fprintln(out, p)
+				}
+			}
+			for _, b := range listRes.Blobs {
+				fmt.Fprintln(out, SprintBlob(b))
+			}
+		default:
+			// channel blocking
+		}
+	}
+}
+func SprintBlobCh(b <-chan storage.Blob) <-chan string {
+	ch := make(chan string, 5000)
+	go func() {
+		defer close(ch)
+	loop:
+		for {
+			select {
+			case b, ok := <-b:
+				if !ok {
+					break loop
+				}
+				ch <- SprintBlob(b)
+			default:
+				// channel blocking
+			}
+		}
+	}()
 	return ch
 }
 

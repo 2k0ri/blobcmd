@@ -32,6 +32,8 @@ var RootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	},
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -43,6 +45,12 @@ func Execute() {
 	}
 }
 
+// persistent variables
+var (
+	ConnectionString, AccountName, AccountKey, Container, Prefix, AzureStorageEntrypoint string
+	Recursive, DisableHttps                                                              bool
+)
+
 func init() {
 	cobra.OnInitialize(initConfig)
 
@@ -51,18 +59,18 @@ func init() {
 	// will be global for your application.
 	viper.SetEnvPrefix("AZURE_STORAGE")
 
-	RootCmd.PersistentFlags().StringP("connection-string", "c", "", "Storage connection string [AZURE_STORAGE_CONNECTION_STRING]")
+	RootCmd.PersistentFlags().StringVarP(&ConnectionString, "connection-string", "c", "", "Storage connection string [AZURE_STORAGE_CONNECTION_STRING]")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	RootCmd.PersistentFlags().StringP("account-name", "a", "", "Storage account name [AZURE_STORAGE_ACCOUNT]")
+	RootCmd.PersistentFlags().StringVarP(&AccountName, "account-name", "a", "", "Storage account name [AZURE_STORAGE_ACCOUNT]")
 	viper.RegisterAlias("account", "account-name")
-	RootCmd.PersistentFlags().StringP("account-key", "k", "", "Storage account key [AZURE_STORAGE_ACCESS_KEY]")
+	RootCmd.PersistentFlags().StringVarP(&AccountKey, "account-key", "k", "", "Storage account key [AZURE_STORAGE_ACCESS_KEY]")
 	viper.RegisterAlias("access-key", "account-key")
-	RootCmd.PersistentFlags().StringP("container", "C", "", "Storage container name [AZURE_STORAGE_CONTAINER]")
-	RootCmd.PersistentFlags().StringP("prefix", "p", "", "Prefix for blob")
-	RootCmd.PersistentFlags().BoolP("recursive", "r", false, "Execute recursively")
-	RootCmd.PersistentFlags().Bool("disable-https", false, "Disable https access")
-	RootCmd.PersistentFlags().StringP("azure-storage-entrypoint", "E", "", "Azure Storage Entry Point")
+	RootCmd.PersistentFlags().StringVarP(&Container, "container", "C", "", "Storage container name [AZURE_STORAGE_CONTAINER]")
+	RootCmd.PersistentFlags().StringVarP(&Prefix, "prefix", "p", "", "Prefix for blob")
+	RootCmd.PersistentFlags().BoolVarP(&Recursive, "recursive", "r", false, "Execute recursively")
+	RootCmd.PersistentFlags().BoolVar(&DisableHttps, "disable-https", false, "Disable https access")
+	RootCmd.PersistentFlags().StringVarP(&AzureStorageEntrypoint, "azure-storage-entrypoint", "E", "core.windows.net", "Azure Storage Entry Point")
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.blobcmd.yaml)")
 }
 

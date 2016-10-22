@@ -14,14 +14,26 @@
 
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"log"
+
+	"sync"
+
+	"github.com/2k0ri/blobcmd/lib"
+	"github.com/spf13/cobra"
+)
 
 // lsCmd represents the ls command
 var lsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "list blobs",
 	Run: func(cmd *cobra.Command, args []string) {
-
+		c, err := lib.NewAzureClient(AccountName, AccountKey, AzureStorageEntrypoint, DisableHttps)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var w sync.WaitGroup
+		c.ListAndPrint(Container, Prefix, Recursive, &w)
 	},
 }
 
