@@ -302,18 +302,22 @@ func (c *AzureClient) Glob(pattern string) (matches []string, err error) {
 // list inputs storage.BlobListResponse into provided channel
 // it covers recursive traverse within azure storage blob
 func (c *AzureClient) list(container, prefix string, recursive bool, ch chan storage.BlobListResponse) {
+	defer close(ch)
+	ise, err := c.blobClient.ContainerExists(container)
+	if err != nil || !ise {
+		log.Fatalln("ERROR: provided container not found.")
+		return
+	}
 	param := storage.ListBlobsParameters{Prefix: prefix}
 	if !recursive {
 		param.Delimiter = "/"
 	}
-	defer close(ch)
 	// loop until NextMarker ends
 	for {
 		res, err := c.blobClient.ListBlobs(container, param)
 		if err != nil {
-			// @TODO genuine error handling
 			log.Println(err)
-			continue
+			break
 		}
 		ch <- res
 		if res.NextMarker == "" {
@@ -324,8 +328,6 @@ func (c *AzureClient) list(container, prefix string, recursive bool, ch chan sto
 }
 
 // ListAndPrint outputs print blobs to Stdout
-// @TODO stop when container not found
-// @TODO finish channel
 func (c *AzureClient) ListAndPrint(container, prefix string, recursive bool, w *sync.WaitGroup) {
 	lr := make(chan storage.BlobListResponse, 1024)
 	w.Add(2)
